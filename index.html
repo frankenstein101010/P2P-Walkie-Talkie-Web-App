@@ -74,23 +74,25 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
 .status-badge.connected .indicator { background: #4caf50; }
 .status-badge.disconnected .indicator { background: #ef5350; }
 
-.ptt-btn {
-  width: 160px; height: 160px; border-radius: 50%; border: none;
-  font-size: 1rem; font-weight: 700; color: #fff; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.2s;
+.mute-btn {
+  width: 120px; height: 120px; border-radius: 50%; border: none;
+  font-size: 0.85rem; font-weight: 700; color: #fff; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
   margin: 20px 0;
   -webkit-tap-highlight-color: transparent;
 }
-.ptt-btn.idle {
+.mute-btn.unmuted {
+  background: radial-gradient(circle at 40% 35%, #43a047, #2e7d32);
+  box-shadow: 0 4px 24px rgba(76,175,80,0.4);
+}
+.mute-btn.muted {
   background: radial-gradient(circle at 40% 35%, #d32f2f, #b71c1c);
   box-shadow: 0 4px 20px rgba(211,47,47,0.4);
 }
-.ptt-btn.active {
-  background: radial-gradient(circle at 40% 35%, #43a047, #2e7d32);
-  box-shadow: 0 4px 30px rgba(76,175,80,0.5);
-  transform: scale(1.05);
-}
+.mute-btn:active { transform: scale(0.95); }
+.mute-btn .mic-icon { font-size: 2rem; line-height: 1; }
+.call-timer { font-size: 1.5rem; font-weight: 300; color: #888; margin: 8px 0; font-variant-numeric: tabular-nums; }
 
 .volume-bar-container {
   width: 80%; max-width: 300px; height: 8px; background: #222;
@@ -169,10 +171,10 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
     <div class="indicator"></div>
     <span id="status-text">Connected</span>
   </div>
-  <button id="ptt-btn" class="ptt-btn idle"
-    onpointerdown="pttDown(event)" onpointerup="pttUp(event)" onpointerleave="pttUp(event)"
-    oncontextmenu="return false;">
-    HOLD TO TALK
+  <p id="call-timer" class="call-timer">0:00</p>
+  <button id="mute-btn" class="mute-btn unmuted" onclick="toggleMute()">
+    <span class="mic-icon" id="mic-icon">&#x1F399;</span>
+    <span id="mute-label">Mute</span>
   </button>
   <p class="label" style="align-self:center">Incoming audio</p>
   <div class="volume-bar-container">
@@ -190,6 +192,9 @@ let role = null; // 'creator' | 'joiner'
 let audioCtx = null;
 let analyser = null;
 let volumeAnimFrame = null;
+let isMuted = false;
+let callStartTime = null;
+let callTimerInterval = null;
 
 // ─── Screens ───
 function showScreen(id) {
@@ -201,8 +206,6 @@ function showScreen(id) {
 async function getMic() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    // Mute all tracks by default (push-to-talk)
-    localStream.getAudioTracks().forEach(t => t.enabled = false);
     return true;
   } catch (e) {
     alert('Microphone access is required.\n' + e.message);
@@ -226,8 +229,10 @@ function createPC() {
     if (state === 'connected' || state === 'completed') {
       showScreen('screen-connected');
       updateStatusBadge(true);
+      startCallTimer();
     } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
       updateStatusBadge(false);
+      stopCallTimer();
     }
   };
 }
@@ -356,23 +361,39 @@ async function joinerAcceptOffer() {
   }
 }
 
-// ─── Push-to-Talk ───
-function pttDown(e) {
-  e.preventDefault();
-  const btn = document.getElementById('ptt-btn');
-  btn.classList.remove('idle');
-  btn.classList.add('active');
-  btn.textContent = 'TALKING…';
-  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = true);
+// ─── Mute Toggle ───
+function toggleMute() {
+  isMuted = !isMuted;
+  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  const btn = document.getElementById('mute-btn');
+  const icon = document.getElementById('mic-icon');
+  const label = document.getElementById('mute-label');
+  if (isMuted) {
+    btn.className = 'mute-btn muted';
+    icon.innerHTML = '&#x1F507;';
+    label.textContent = 'Unmute';
+  } else {
+    btn.className = 'mute-btn unmuted';
+    icon.innerHTML = '&#x1F399;';
+    label.textContent = 'Mute';
+  }
 }
 
-function pttUp(e) {
-  e.preventDefault();
-  const btn = document.getElementById('ptt-btn');
-  btn.classList.remove('active');
-  btn.classList.add('idle');
-  btn.textContent = 'HOLD TO TALK';
-  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
+// ─── Call Timer ───
+function startCallTimer() {
+  if (callTimerInterval) return;
+  callStartTime = Date.now();
+  const el = document.getElementById('call-timer');
+  callTimerInterval = setInterval(() => {
+    const secs = Math.floor((Date.now() - callStartTime) / 1000);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    el.textContent = m + ':' + String(s).padStart(2, '0');
+  }, 1000);
+}
+
+function stopCallTimer() {
+  if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
 }
 
 // ─── Status Badge ───
