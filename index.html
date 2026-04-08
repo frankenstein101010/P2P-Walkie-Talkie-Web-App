@@ -39,7 +39,6 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
 .btn:active { transform: scale(0.97); }
 .btn-primary { background: #1e88e5; }
 .btn-green { background: #388e3c; }
-.btn-orange { background: #e65100; }
 .btn-small { width: auto; padding: 10px 20px; font-size: 0.9rem; border-radius: 8px; }
 
 /* Textarea */
@@ -68,9 +67,7 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
 }
 .status-badge.connected { background: #1b3a1b; color: #4caf50; }
 .status-badge.disconnected { background: #3a1b1b; color: #ef5350; }
-.status-badge .indicator {
-  width: 8px; height: 8px; border-radius: 50%;
-}
+.status-badge .indicator { width: 8px; height: 8px; border-radius: 50%; }
 .status-badge.connected .indicator { background: #4caf50; }
 .status-badge.disconnected .indicator { background: #ef5350; }
 
@@ -79,8 +76,7 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
   font-size: 0.85rem; font-weight: 700; color: #fff; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-  margin: 20px 0;
-  -webkit-tap-highlight-color: transparent;
+  margin: 20px 0; -webkit-tap-highlight-color: transparent;
 }
 .mute-btn.unmuted {
   background: radial-gradient(circle at 40% 35%, #43a047, #2e7d32);
@@ -107,11 +103,19 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
 .spacer { height: 12px; }
 .info { font-size: 0.8rem; color: #666; text-align: center; margin: 8px 0; line-height: 1.4; }
 .error { color: #ef5350; font-size: 0.85rem; margin: 8px 0; text-align: center; }
+
+.relay-icon { font-size: 4rem; margin: 30px 0 16px; }
+.waiting-spinner {
+  display: inline-block; width: 20px; height: 20px; border: 2px solid #555;
+  border-top-color: #4caf50; border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
-<!-- Screen 0: Home -->
+<!-- Screen: Home -->
 <div id="screen-home" class="screen active">
   <h1>WALKIE-TALKIE</h1>
   <h2>Peer-to-Peer Audio</h2>
@@ -123,50 +127,69 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
   <p class="info">No servers. No accounts.<br>Direct browser-to-browser audio.</p>
 </div>
 
-<!-- Screen 1: Creator - show offer -->
+<!-- Screen: Creator - show offer QR, wait for answer -->
 <div id="screen-creator-offer" class="screen">
   <h1>CREATE CALL</h1>
-  <div class="steps"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
-  <p class="info">Share this offer with the other person.<br>They need to paste it in "Join Call".</p>
+  <div class="steps"><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
+  <p class="info">Let the other person scan this QR code<br>with their phone camera.</p>
   <div id="creator-qr" class="qr-container" style="display:none"></div>
   <p id="creator-qr-fallback" class="qr-fallback" style="display:none"></p>
-  <p class="label">Offer data:</p>
+  <p class="label">Or share this link:</p>
   <textarea id="creator-offer-text" class="data-box" readonly></textarea>
-  <button class="copy-btn" onclick="copyText('creator-offer-text')">Copy</button>
+  <button class="copy-btn" onclick="copyText('creator-offer-text')">Copy Link</button>
   <div class="spacer"></div>
-  <p class="label">Paste the answer from the other person:</p>
-  <textarea id="creator-answer-input" class="data-box" placeholder="Paste answer here…"></textarea>
   <div class="spacer"></div>
-  <button class="btn btn-green btn-small" onclick="creatorAcceptAnswer()">Connect</button>
+  <p class="info"><span class="waiting-spinner"></span>Waiting for the other person to join…</p>
+  <div class="spacer"></div>
+  <details style="width:100%">
+    <summary style="color:#666; font-size:0.8rem; cursor:pointer;">Manual paste fallback</summary>
+    <div class="spacer"></div>
+    <p class="label">Paste the answer from the other person:</p>
+    <textarea id="creator-answer-input" class="data-box" placeholder="Paste answer data here…"></textarea>
+    <div class="spacer"></div>
+    <button class="btn btn-green btn-small" onclick="creatorAcceptAnswer()">Connect</button>
+  </details>
   <p id="creator-error" class="error" style="display:none"></p>
 </div>
 
-<!-- Screen 2: Joiner - paste offer, show answer -->
+<!-- Screen: Joiner - auto-processing offer, show answer QR -->
 <div id="screen-joiner" class="screen">
   <h1>JOIN CALL</h1>
-  <div class="steps"><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
-  <p class="info">Paste the offer from the call creator.</p>
-  <p class="label">Paste offer:</p>
-  <textarea id="joiner-offer-input" class="data-box" placeholder="Paste offer here…"></textarea>
-  <div class="spacer"></div>
-  <button id="joiner-generate-btn" class="btn btn-green btn-small" onclick="joinerAcceptOffer()">Generate Answer</button>
-  <p id="joiner-error" class="error" style="display:none"></p>
-  <div id="joiner-answer-section" style="display:none; width:100%; display:none; flex-direction:column; align-items:center;">
-    <div class="spacer"></div>
-    <p class="info">Share this answer back to the call creator.</p>
+  <div class="steps"><div class="dot done"></div><div class="dot active"></div><div class="dot"></div></div>
+  <p id="joiner-status" class="info">Preparing…</p>
+  <div id="joiner-answer-section" style="display:none; width:100%; flex-direction:column; align-items:center;">
+    <p class="info">Now let the caller scan this QR code.</p>
     <div id="joiner-qr" class="qr-container" style="display:none"></div>
     <p id="joiner-qr-fallback" class="qr-fallback" style="display:none"></p>
-    <p class="label">Answer data:</p>
+    <p class="label">Or share this answer data:</p>
     <textarea id="joiner-answer-text" class="data-box" readonly></textarea>
     <button class="copy-btn" onclick="copyText('joiner-answer-text')">Copy</button>
-    <p class="info">Now wait for the creator to paste this answer.<br>Connection will establish automatically.</p>
+    <div class="spacer"></div>
+    <p class="info"><span class="waiting-spinner"></span>Waiting for connection…</p>
+  </div>
+  <p id="joiner-error" class="error" style="display:none"></p>
+  <div id="joiner-manual-section">
+    <p class="label">Or paste offer data manually:</p>
+    <textarea id="joiner-offer-input" class="data-box" placeholder="Paste offer data here…"></textarea>
+    <div class="spacer"></div>
+    <button id="joiner-generate-btn" class="btn btn-green btn-small" onclick="joinerAcceptOffer()">Generate Answer</button>
   </div>
 </div>
 
-<!-- Screen 3: Connected -->
+<!-- Screen: Relay (opened when creator scans answer QR) -->
+<div id="screen-relay" class="screen">
+  <div class="relay-icon">&#x2705;</div>
+  <h1>ANSWER RECEIVED</h1>
+  <div class="spacer"></div>
+  <p class="info">The answer has been sent to your call tab.<br>You can close this tab and return to the original one.</p>
+  <div class="spacer"></div>
+  <p class="info" style="color:#4caf50;">Your call should be connecting now.</p>
+</div>
+
+<!-- Screen: Connected -->
 <div id="screen-connected" class="screen">
   <h1>WALKIE-TALKIE</h1>
-  <div class="steps"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div></div>
+  <div class="steps"><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div></div>
   <div id="status-badge" class="status-badge connected">
     <div class="indicator"></div>
     <span id="status-text">Connected</span>
@@ -188,13 +211,26 @@ h2 { font-size: 1rem; font-weight: 400; color: #888; margin-bottom: 16px; }
 // ─── State ───
 let pc = null;
 let localStream = null;
-let role = null; // 'creator' | 'joiner'
+let role = null;
 let audioCtx = null;
 let analyser = null;
 let volumeAnimFrame = null;
 let isMuted = false;
 let callStartTime = null;
 let callTimerInterval = null;
+
+const BASE_URL = location.origin + location.pathname;
+const LS_ANSWER_KEY = 'wt-answer';
+
+// ─── URL-safe Base64 ───
+function b64Encode(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64Decode(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return atob(s);
+}
 
 // ─── Screens ───
 function showScreen(id) {
@@ -260,34 +296,34 @@ function compressSDP(desc) {
     return true;
   });
   const obj = { type: desc.type, sdp: lines.join('\r\n') };
-  return btoa(JSON.stringify(obj));
+  return b64Encode(JSON.stringify(obj));
 }
 
 function decompressSDP(encoded) {
-  const json = atob(encoded.trim());
+  const json = b64Decode(encoded.trim());
   const obj = JSON.parse(json);
   return new RTCSessionDescription(obj);
 }
 
-// ─── QR Code ───
+// ─── QR Code (now uses URLs) ───
 const QR_MAX_CHARS = 2953;
 
-function showQR(containerId, fallbackId, data) {
+function showQR(containerId, fallbackId, url) {
   const container = document.getElementById(containerId);
   const fallback = document.getElementById(fallbackId);
   container.innerHTML = '';
-  if (data.length <= QR_MAX_CHARS) {
+  if (url.length <= QR_MAX_CHARS) {
     container.style.display = 'block';
     fallback.style.display = 'none';
     new QRCode(container, {
-      text: data, width: 200, height: 200,
+      text: url, width: 220, height: 220,
       colorDark: '#000', colorLight: '#fff',
       correctLevel: QRCode.CorrectLevel.L
     });
   } else {
     container.style.display = 'none';
     fallback.style.display = 'block';
-    fallback.textContent = 'Data too large for QR, please use copy-paste.';
+    fallback.textContent = 'Data too large for QR code. Please use the link/copy-paste below.';
   }
 }
 
@@ -298,7 +334,7 @@ function copyText(id) {
   ta.setSelectionRange(0, ta.value.length);
   navigator.clipboard.writeText(ta.value).then(() => {
     const btn = ta.nextElementSibling;
-    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500); }
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = btn.dataset.label || 'Copy', 1500); }
   }).catch(() => { document.execCommand('copy'); });
 }
 
@@ -310,10 +346,50 @@ async function startCreator() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   await waitForICE();
+
   const compressed = compressSDP(pc.localDescription);
-  document.getElementById('creator-offer-text').value = compressed;
-  showQR('creator-qr', 'creator-qr-fallback', compressed);
+  const offerURL = BASE_URL + '?offer=' + compressed;
+
+  document.getElementById('creator-offer-text').value = offerURL;
+  showQR('creator-qr', 'creator-qr-fallback', offerURL);
   showScreen('screen-creator-offer');
+
+  // Clear any old answer
+  localStorage.removeItem(LS_ANSWER_KEY);
+
+  // Listen for answer via localStorage (from scanning answer QR in another tab)
+  window.addEventListener('storage', onStorageAnswer);
+  // Also poll in case storage event doesn't fire (same-tab edge case)
+  pollForAnswer();
+}
+
+function onStorageAnswer(e) {
+  if (e.key === LS_ANSWER_KEY && e.newValue) {
+    applyAnswer(e.newValue);
+  }
+}
+
+function pollForAnswer() {
+  const interval = setInterval(() => {
+    const val = localStorage.getItem(LS_ANSWER_KEY);
+    if (val) {
+      clearInterval(interval);
+      applyAnswer(val);
+    }
+  }, 500);
+}
+
+async function applyAnswer(data) {
+  window.removeEventListener('storage', onStorageAnswer);
+  localStorage.removeItem(LS_ANSWER_KEY);
+  try {
+    const answer = decompressSDP(data);
+    await pc.setRemoteDescription(answer);
+  } catch (e) {
+    const errEl = document.getElementById('creator-error');
+    errEl.textContent = 'Failed to connect: ' + e.message;
+    errEl.style.display = 'block';
+  }
 }
 
 async function creatorAcceptAnswer() {
@@ -331,11 +407,47 @@ async function creatorAcceptAnswer() {
 }
 
 // ─── Joiner Flow ───
-async function startJoiner() {
+async function startJoiner(offerData) {
   role = 'joiner';
   if (!(await getMic())) return;
   createPC();
+
+  if (offerData) {
+    // Auto-process offer from URL
+    document.getElementById('joiner-manual-section').style.display = 'none';
+    await joinerProcessOffer(offerData);
+  } else {
+    showScreen('screen-joiner');
+  }
+}
+
+async function joinerProcessOffer(data) {
+  const errEl = document.getElementById('joiner-error');
+  const statusEl = document.getElementById('joiner-status');
   showScreen('screen-joiner');
+  try {
+    statusEl.textContent = 'Processing offer…';
+    const offer = decompressSDP(data);
+    await pc.setRemoteDescription(offer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await waitForICE();
+
+    const compressed = compressSDP(pc.localDescription);
+    const answerURL = BASE_URL + '?answer=' + compressed;
+
+    document.getElementById('joiner-answer-text').value = compressed;
+    const section = document.getElementById('joiner-answer-section');
+    section.style.display = 'flex';
+    statusEl.style.display = 'none';
+
+    showQR('joiner-qr', 'joiner-qr-fallback', answerURL);
+  } catch (e) {
+    errEl.textContent = 'Invalid offer: ' + e.message;
+    errEl.style.display = 'block';
+    statusEl.style.display = 'none';
+    document.getElementById('joiner-manual-section').style.display = 'block';
+  }
 }
 
 async function joinerAcceptOffer() {
@@ -343,22 +455,14 @@ async function joinerAcceptOffer() {
   errEl.style.display = 'none';
   const data = document.getElementById('joiner-offer-input').value.trim();
   if (!data) { errEl.textContent = 'Please paste the offer.'; errEl.style.display = 'block'; return; }
-  try {
-    const offer = decompressSDP(data);
-    await pc.setRemoteDescription(offer);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await waitForICE();
-    const compressed = compressSDP(pc.localDescription);
-    document.getElementById('joiner-answer-text').value = compressed;
-    const section = document.getElementById('joiner-answer-section');
-    section.style.display = 'flex';
-    showQR('joiner-qr', 'joiner-qr-fallback', compressed);
-    document.getElementById('joiner-generate-btn').style.display = 'none';
-  } catch (e) {
-    errEl.textContent = 'Invalid offer data: ' + e.message;
-    errEl.style.display = 'block';
-  }
+  document.getElementById('joiner-manual-section').style.display = 'none';
+  await joinerProcessOffer(data);
+}
+
+// ─── Relay Screen (answer QR scanned by creator) ───
+function handleRelay(answerData) {
+  localStorage.setItem(LS_ANSWER_KEY, answerData);
+  showScreen('screen-relay');
 }
 
 // ─── Mute Toggle ───
@@ -434,6 +538,20 @@ function startVolumeViz(stream) {
     console.warn('Volume visualization not available:', e);
   }
 }
+
+// ─── URL Routing on Page Load ───
+(function init() {
+  const params = new URLSearchParams(location.search);
+
+  if (params.has('answer')) {
+    // Creator scanned the answer QR → relay answer via localStorage
+    handleRelay(params.get('answer'));
+  } else if (params.has('offer')) {
+    // Joiner scanned the offer QR → auto-join
+    startJoiner(params.get('offer'));
+  }
+  // Otherwise: show home screen (default)
+})();
 </script>
 </body>
 </html>
